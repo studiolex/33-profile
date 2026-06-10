@@ -45,7 +45,7 @@ module.exports = async (req, res) => {
     const buffer = await generatePdf(url);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}.pdf"`);
-    return res.send(buffer);
+return res.send(Buffer.from(buffer));
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: e.message });
