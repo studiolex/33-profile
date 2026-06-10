@@ -23,7 +23,7 @@ const PDF_OPTIONS = {
   format: "A4",
   printBackground: true,
   scale: 0.65, // layout op ~1220px (desktop-breakpoint), geschaald naar A4
-  margin: { top: "0", bottom: "0", left: "0", right: "0" },
+  margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" },
 };
 
 // Geef in Framer deze namen aan de layers:
