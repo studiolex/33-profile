@@ -51,10 +51,9 @@ return res.send(Buffer.from(buffer));
     return res.status(500).json({ error: e.message });
   }
 };
-
 async function generatePdf(url) {
-const chromium = (await import("@sparticuz/chromium")).default;
-const puppeteer = (await import("puppeteer-core")).default ?? (await import("puppeteer-core"));
+  const chromium = (await import("@sparticuz/chromium")).default;
+  const puppeteer = (await import("puppeteer-core")).default ?? (await import("puppeteer-core"));
 
   const browser = await puppeteer.launch({
     args: chromium.args,
@@ -64,7 +63,11 @@ const puppeteer = (await import("puppeteer-core")).default ?? (await import("pup
   });
   try {
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
+    // best effort: wacht op netwerkstilte, maar faal er nooit op
+    await page.waitForNetworkIdle({ idleTime: 800, timeout: 8000 }).catch(() => {});
+    // korte adempauze zodat fonts en afbeeldingen gepaint zijn
+    await new Promise((r) => setTimeout(r, 1000));
     await page.addStyleTag({ content: PRINT_CSS });
     await page.emulateMediaType("print");
     return await page.pdf(PDF_OPTIONS);
