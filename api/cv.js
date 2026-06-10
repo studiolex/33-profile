@@ -58,6 +58,7 @@ const META_LABELS = new Set(["call", "silk", "new york"]);
 // ── Handler ─────────────────────────────────────────────────────────────────
 module.exports = async (req, res) => {
   try {
+    res.setHeader("Access-Control-Allow-Origin", "https://www.33chambers.co.uk");
     const { slug, format = "pdf" } = req.query;
     if (!slug || !SLUG_RE.test(slug)) {
       return res.status(400).json({ error: "Ongeldige of ontbrekende ?slug=" });
