@@ -15,7 +15,8 @@ const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 const PDF_OPTIONS = {
   format: "A4",
   printBackground: true,
-  margin: { top: "14mm", bottom: "14mm", left: "12mm", right: "12mm" },
+  scale: 0.65,
+  margin: { top: "0", bottom: "0", left: "0", right: "0" },
 };
 const PRINT_CSS = `
   nav, footer, [data-framer-name="Nav"], [data-framer-name="Footer"] { display: none !important; }
