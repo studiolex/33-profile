@@ -16,7 +16,7 @@ const PDF_OPTIONS = {
   format: "A4",
   printBackground: true,
   scale: 0.65,
-  margin: { top: "0", bottom: "0", left: "0", right: "0" },
+margin: { top: "14mm", bottom: "14mm", left: "12mm", right: "12mm" },
 };
 const PRINT_CSS = `
   nav, footer, [data-framer-name="Nav"], [data-framer-name="Footer"] { display: none !important; }
