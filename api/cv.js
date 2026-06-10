@@ -1,6 +1,11 @@
 /**
  * GET /api/cv?slug=kennedy-talbot              → PDF (pixel-perfect print van de /pdf-pagina)
  * GET /api/cv?slug=kennedy-talbot&format=docx  → bewerkbaar, gestyled Word-document
+ *
+ * Vereist in package.json:
+ *   "engines": { "node": "22.x" }
+ *   "@sparticuz/chromium": "^149.0.0", "puppeteer-core": "^25.1.0",
+ *   "cheerio": "^1.0.0", "docx": "^9.0.0"
  */
 
 const cheerio = require("cheerio");
@@ -8,24 +13,49 @@ const {
   Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, LevelFormat, BorderStyle,
 } = require("docx");
 
+// ── Configuratie ────────────────────────────────────────────────────────────
 const SITE = "https://www.33chambers.co.uk";
 const PAGE = (slug) => `${SITE}/people/${slug}/pdf`;
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 
+// ── PDF-instellingen ────────────────────────────────────────────────────────
 const PDF_OPTIONS = {
   format: "A4",
   printBackground: true,
-  scale: 0.65,
-margin: { top: "0", bottom: "0", left: "0", right: "0" },
+  scale: 0.65, // layout op ~1220px (desktop-breakpoint), geschaald naar A4
+  margin: { top: "0", bottom: "0", left: "0", right: "0" },
 };
+
+// Geef in Framer deze namen aan de layers:
+//  - "SectionHeader"   → de kop-balk van elke sectie
+//  - "CaseItem"        → het herhalende blokje van één case (naam + omschrijving)
+//  - "PracticeSection" → alléén de korte secties die altijd op 1 pagina passen
 const PRINT_CSS = `
   nav, footer, [data-framer-name="Nav"], [data-framer-name="Footer"] { display: none !important; }
   a { text-decoration: none; color: inherit; }
-  h2, h3 { break-after: avoid; }
-  blockquote, li { break-inside: avoid; },
-  [data-framer-name="SectionHeader"] { break-after: avoid; }
+  h1, h2, h3, h4 { break-after: avoid; }
+  blockquote, li { break-inside: avoid; }
+  [data-framer-name="SectionHeader"] { break-after: avoid; break-inside: avoid; }
+  [data-framer-name="CaseItem"] { break-inside: avoid; }
+  [data-framer-name="PracticeSection"] { break-inside: avoid; }
 `;
 
+// ── DOCX-stijl: pas hier de huisstijl van het Word-document aan ─────────────
+const DOCX_THEME = {
+  font: "Georgia", bodySize: 21, lineSpacing: 300,
+  headingColor: "1F2A44", accentColor: "C9A45C", greyColor: "666666",
+  h1: 40, h2: 27, h3: 23,
+};
+
+const SKIP = new Set(["view cases", "quotes", "contact", "other language(s)", "download cv"]);
+const GROUP_LABELS = new Set([
+  "white collar, crime & investigations",
+  "commercial dispute resolution",
+  "international & offshore",
+]);
+const META_LABELS = new Set(["call", "silk", "new york"]);
+
+// ── Handler ─────────────────────────────────────────────────────────────────
 module.exports = async (req, res) => {
   try {
     const { slug, format = "pdf" } = req.query;
@@ -55,6 +85,8 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: e.message });
   }
 };
+
+// ── PDF: headless Chrome print de echte pagina ──────────────────────────────
 async function generatePdf(url) {
   const chromium = (await import("@sparticuz/chromium")).default;
   const puppeteer = (await import("puppeteer-core")).default ?? (await import("puppeteer-core"));
@@ -67,11 +99,12 @@ async function generatePdf(url) {
   });
   try {
     const page = await browser.newPage();
+    await page.setViewport({ width: 1440, height: 2000 });
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
-    // best effort: wacht op netwerkstilte, maar faal er nooit op
-    await page.waitForNetworkIdle({ idleTime: 800, timeout: 8000 }).catch(() => {});
+    // best effort: wacht kort op netwerkstilte, maar faal er nooit op
+    await page.waitForNetworkIdle({ idleTime: 500, timeout: 4000 }).catch(() => {});
     // korte adempauze zodat fonts en afbeeldingen gepaint zijn
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, 400));
     await page.addStyleTag({ content: PRINT_CSS });
     await page.emulateMediaType("print");
     return await page.pdf(PDF_OPTIONS);
@@ -80,21 +113,7 @@ async function generatePdf(url) {
   }
 }
 
-
-const DOCX_THEME = {
-  font: "Georgia", bodySize: 21, lineSpacing: 300,
-  headingColor: "1F2A44", accentColor: "C9A45C", greyColor: "666666",
-  h1: 40, h2: 27, h3: 23,
-};
-
-const SKIP = new Set(["view cases", "quotes", "contact", "other language(s)", "download cv"]);
-const GROUP_LABELS = new Set([
-  "white collar, crime & investigations",
-  "commercial dispute resolution",
-  "international & offshore",
-]);
-const META_LABELS = new Set(["call", "silk", "new york"]);
-
+// ── DOCX: HTML uitlezen en met structuurherkenning opmaken ──────────────────
 const clean = (s) => s.replace(/\s+/g, " ").trim();
 const isJunk = (t) => SKIP.has(t.toLowerCase()) || /^\.{2}\//.test(t) || /^https?:\/\//.test(t);
 const isQuote = (t) => /^[\u201C"']/.test(t) || /^\.\./.test(t);
@@ -121,7 +140,7 @@ async function generateDocx(html) {
   const blocks = extractBlocks($);
   if (!blocks.length) throw new Error("Geen content gevonden.");
 
-  // De pagina bevat de Experience-sectie 2x (kaal + volledig).
+  // De pagina kan de Experience-sectie 2x bevatten (kaal + volledig).
   // Splits op de heading en gebruik: kop/bio vóór de eerste, secties vanaf de laatste.
   const expIdx = blocks
     .map((b, i) => (b.isHeading && /experience\s*&\s*expertise/i.test(b.text) ? i : -1))
@@ -137,9 +156,18 @@ async function generateDocx(html) {
     children: [],
   });
 
-  // ── Kop: naam, titel, meta-regel (Call 1984 · New York 1993 · Silk 2016), expertise, bio ──
+  // ── Kop: naam, titel, meta-regel, expertise, bio ──
   const metaParts = [];
   let pendingLabel = null, prevText = null;
+
+  function flushMeta() {
+    if (!metaParts.length) return;
+    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 },
+      children: [new TextRun({ text: metaParts.join("  \u00B7  "), color: T.greyColor })] }));
+    children.push(goldRule());
+    metaParts.length = 0;
+  }
+
   for (const b of headerBlocks) {
     if (b.text === prevText) continue; // "Call Call" → 1x
     prevText = b.text;
@@ -168,14 +196,6 @@ async function generateDocx(html) {
   }
   flushMeta();
 
-  function flushMeta() {
-    if (!metaParts.length) return;
-    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 },
-      children: [new TextRun({ text: metaParts.join("  \u00B7  "), color: T.greyColor })] }));
-    children.push(goldRule());
-    metaParts.length = 0;
-  }
-
   // ── Secties: groepslabels, koppen, zaken, quotes ──
   const seen = new Set();
   let first = true;
@@ -198,7 +218,7 @@ async function generateDocx(html) {
       children.push(new Paragraph({ heading: HeadingLevel.HEADING_3, children: [new TextRun(b.text)] }));
       continue;
     }
-    if (seen.has(key)) continue; // restant-duplicaten binnen de helft
+    if (seen.has(key)) continue; // restant-duplicaten
     seen.add(key);
 
     if (b.tag === "li") {
@@ -244,7 +264,7 @@ async function generateDocx(html) {
       levels: [{ level: 0, format: LevelFormat.BULLET, text: "\u2022", alignment: AlignmentType.LEFT,
         style: { paragraph: { indent: { left: 720, hanging: 360 } } } }] }] },
     sections: [{
-      properties: { page: { size: { width: 11906, height: 16838 },
+      properties: { page: { size: { width: 11906, height: 16838 }, // A4
         margin: { top: 1300, right: 1440, bottom: 1300, left: 1440 } } },
       children,
     }],
