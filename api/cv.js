@@ -22,7 +22,8 @@ const PRINT_CSS = `
   nav, footer, [data-framer-name="Nav"], [data-framer-name="Footer"] { display: none !important; }
   a { text-decoration: none; color: inherit; }
   h2, h3 { break-after: avoid; }
-  blockquote, li { break-inside: avoid; }
+  blockquote, li { break-inside: avoid; },
+  [data-framer-name="SectionHeader"] { break-after: avoid; }
 `;
 
 module.exports = async (req, res) => {
