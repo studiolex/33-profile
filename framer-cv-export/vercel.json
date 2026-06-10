@@ -1,5 +1,0 @@
-{
-  "functions": {
-    "api/cv.js": { "maxDuration": 30 }
-  }
-}
