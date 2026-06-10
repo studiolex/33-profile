@@ -1,48 +1,52 @@
 /**
  * GET /api/cv?slug=kennedy-talbot              → PDF (pixel-perfect print van de /pdf-pagina)
- * GET /api/cv?slug=kennedy-talbot&format=docx  → bewerkbaar Word-document
+ * GET /api/cv?slug=kennedy-talbot&format=docx  → bewerkbaar, gestyled Word-document
  *
- * De content wordt op het moment van de klik live van de Framer-pagina gehaald,
- * dus CMS-updates zitten er altijd automatisch in.
+ * Vereist in package.json:
+ *   "engines": { "node": "22.x" }
+ *   "@sparticuz/chromium": "^149.0.0", "puppeteer-core": "^25.1.0",
+ *   "cheerio": "^1.0.0", "docx": "^9.0.0"
  */
 
 const cheerio = require("cheerio");
 const {
-  Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, LevelFormat,
+  Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, LevelFormat, BorderStyle,
 } = require("docx");
 
 // ── Configuratie ────────────────────────────────────────────────────────────
 const SITE = "https://www.33chambers.co.uk";
-const PAGE = (slug) => `${SITE}/people/${slug}/pdf`; // jullie print-vriendelijke pagina
-const SLUG_RE = /^[a-z0-9-]{1,80}$/; // beveiliging: alleen geldige slugs, geen vrije URL's
+const PAGE = (slug) => `${SITE}/people/${slug}/pdf`;
+const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 
-// ── PDF-stijl (pixel-perfect route) ─────────────────────────────────────────
-// De opmaak van de PDF = de opmaak van je Framer /pdf-pagina zelf.
-// Hier stuur je alleen het "papier" aan; extra print-CSS kun je injecteren via PRINT_CSS.
+// ── PDF-stijl ───────────────────────────────────────────────────────────────
 const PDF_OPTIONS = {
   format: "A4",
   printBackground: true,
   margin: { top: "14mm", bottom: "14mm", left: "12mm", right: "12mm" },
 };
 const PRINT_CSS = `
-  /* Wordt vlak voor het printen in de pagina geïnjecteerd.
-     Handig om webdingen te verbergen of regels af te dwingen: */
   nav, footer, [data-framer-name="Nav"], [data-framer-name="Footer"] { display: none !important; }
   a { text-decoration: none; color: inherit; }
-  h2, h3 { break-after: avoid; }          /* geen kop onderaan een pagina */
-  blockquote, li { break-inside: avoid; } /* quotes/items niet doormidden */
+  h2, h3 { break-after: avoid; }
+  blockquote, li { break-inside: avoid; }
 `;
 
-// ── DOCX-stijl (bewerkbare route) ───────────────────────────────────────────
-// Pas hier font, groottes (halve punten: 22 = 11pt), kleuren (hex) en witruimte aan.
+// ── DOCX-stijl: pas hier de huisstijl aan ───────────────────────────────────
 const DOCX_THEME = {
-  font: "Georgia",
-  bodySize: 21,          // 10,5pt
+  font: "Georgia",       // lettertype voor het hele document
+  bodySize: 21,          // 10,5pt (halve punten: 22 = 11pt)
   lineSpacing: 300,      // 1,25 regelafstand
-  headingColor: "1F2A44",
-  accentColor: "C9A45C",
-  h1: 40, h2: 27, h3: 23, // 20pt / 13,5pt / 11,5pt
+  headingColor: "1F2A44",// navy
+  accentColor: "C9A45C", // goud (lijnen, groepslabels)
+  greyColor: "666666",   // bronvermeldingen
+  h1: 40, h2: 27, h3: 23,
 };
+
+// UI-teksten van de site die niet in het document horen
+const SKIP_EXACT = new Set([
+  "view cases", "quotes", "contact", "call", "silk", "new york",
+  "other language(s)", "download cv",
+]);
 
 // ── Handler ─────────────────────────────────────────────────────────────────
 module.exports = async (req, res) => {
@@ -55,7 +59,9 @@ module.exports = async (req, res) => {
     const filename = `${slug}-33-chambers`;
 
     if (format === "docx") {
-      const buffer = await generateDocx(url);
+      const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; cv-export/1.0)" } });
+      if (!r.ok) throw new Error(`Pagina ophalen mislukt: ${r.status}`);
+      const buffer = await generateDocx(await r.text());
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}.docx"`);
       return res.send(buffer);
@@ -75,12 +81,13 @@ module.exports = async (req, res) => {
 async function generatePdf(url) {
   const chromium = require("@sparticuz/chromium");
   const puppeteer = require("puppeteer-core");
-const browser = await puppeteer.launch({
-  args: chromium.args,
-  defaultViewport: chromium.defaultViewport,
-  executablePath: await chromium.executablePath(),
-  headless: chromium.headless,
-});
+
+  const browser = await puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  });
   try {
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
@@ -92,17 +99,19 @@ const browser = await puppeteer.launch({
   }
 }
 
-// ── DOCX: HTML uitlezen en als bewerkbaar Word-document opbouwen ────────────
-async function generateDocx(url) {
-  const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; cv-export/1.0)" } });
-  if (!r.ok) throw new Error(`Pagina ophalen mislukt: ${r.status}`);
-  const $ = cheerio.load(await r.text());
+// ── DOCX: HTML uitlezen en met structuurherkenning opmaken ──────────────────
+const clean = (s) => s.replace(/\s+/g, " ").trim();
+const isQuote = (t) => /^[\u201C"']/.test(t) || /^\.\./.test(t);
+const isSource = (t) => /^(chambers (and|&) partners|legal 500|who'?s who legal|the legal 500)/i.test(t);
+const isCaseName = (t) =>
+  t.length < 160 && (/\[\d{4}\]/.test(t) || /\sv\.?\s/.test(t) || /\((SC|Supreme Court|Court of Appeal)\)/i.test(t));
+
+async function generateDocx(html) {
+  const $ = cheerio.load(html);
   $("script, style, noscript, nav, footer").remove();
 
-  const HEADINGS = { h1: HeadingLevel.HEADING_1, h2: HeadingLevel.HEADING_2, h3: HeadingLevel.HEADING_3,
-                     h4: HeadingLevel.HEADING_4, h5: HeadingLevel.HEADING_5, h6: HeadingLevel.HEADING_6 };
-  const clean = (s) => s.replace(/\s+/g, " ").trim();
-  const seen = new Set(); // Framer rendert desktop/tablet/mobiel-varianten → ontdubbelen
+  const HEADING_LVL = { h1: 1, h2: 2, h3: 3, h4: 3, h5: 3, h6: 3 };
+  const seen = new Set();
   const blocks = [];
 
   $("body").find("h1, h2, h3, h4, h5, h6, p, li, blockquote").each((_, el) => {
@@ -110,22 +119,74 @@ async function generateDocx(url) {
     if ($(el).parents("li").length && tag !== "li") return;
     const text = clean($(el).text());
     if (!text || text.length < 2) return;
+    if (SKIP_EXACT.has(text.toLowerCase())) return;   // knop-/labelteksten overslaan
+    if (tag === "p" && /^\d{4}$/.test(text)) return;  // losse jaartallen overslaan
     const key = `${tag}::${text}`;
-    if (seen.has(key)) return;
+    if (seen.has(key)) return;                        // Framer breakpoint-duplicaten
     seen.add(key);
     blocks.push({ tag, text });
   });
   if (!blocks.length) throw new Error("Geen content gevonden op de pagina.");
 
   const T = DOCX_THEME;
-  const children = blocks.map(({ tag, text }) => {
-    if (HEADINGS[tag]) return new Paragraph({ heading: HEADINGS[tag], children: [new TextRun(text)] });
-    if (tag === "li") return new Paragraph({ numbering: { reference: "bullets", level: 0 },
-      spacing: { after: 80 }, children: [new TextRun(text)] });
-    if (tag === "blockquote") return new Paragraph({ indent: { left: 360 }, spacing: { after: 160 },
-      children: [new TextRun({ text, italics: true })] });
-    return new Paragraph({ spacing: { after: 160 }, children: [new TextRun(text)] });
-  });
+  const children = [];
+
+  for (const { tag, text } of blocks) {
+    if (HEADING_LVL[tag]) {
+      const lvl = HEADING_LVL[tag];
+      children.push(new Paragraph({
+        heading: [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3][lvl - 1],
+        alignment: lvl === 1 ? AlignmentType.CENTER : undefined,
+        children: [new TextRun(text)],
+      }));
+      if (lvl === 1) children.push(new Paragraph({ // gouden lijn onder hoofdtitel
+        spacing: { after: 240 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: T.accentColor, space: 4 } },
+        children: [],
+      }));
+      continue;
+    }
+    if (tag === "li") {
+      children.push(new Paragraph({
+        numbering: { reference: "bullets", level: 0 },
+        spacing: { after: 80 },
+        children: [new TextRun(text)],
+      }));
+      continue;
+    }
+    if (isQuote(text)) {
+      children.push(new Paragraph({
+        indent: { left: 360 },
+        spacing: { after: 30 },
+        border: { left: { style: BorderStyle.SINGLE, size: 12, color: T.accentColor, space: 8 } },
+        children: [new TextRun({ text, italics: true })],
+      }));
+      continue;
+    }
+    if (isSource(text)) {
+      children.push(new Paragraph({
+        indent: { left: 360 },
+        spacing: { after: 180 },
+        children: [new TextRun({ text, color: T.greyColor, size: T.bodySize - 3 })],
+      }));
+      continue;
+    }
+    if (isCaseName(text)) {
+      children.push(new Paragraph({
+        spacing: { before: 80, after: 40 },
+        children: [new TextRun({ text, bold: true })],
+      }));
+      continue;
+    }
+    if (/^(white collar|commercial dispute|international & offshore)/i.test(text) && text.length < 60) {
+      children.push(new Paragraph({
+        spacing: { before: 160, after: 20 },
+        children: [new TextRun({ text: text.toUpperCase(), bold: true, color: T.accentColor, size: 16 })],
+      }));
+      continue;
+    }
+    children.push(new Paragraph({ spacing: { after: 160 }, children: [new TextRun(text)] }));
+  }
 
   const doc = new Document({
     styles: {
@@ -134,13 +195,13 @@ async function generateDocx(url) {
       paragraphStyles: [
         { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
           run: { size: T.h1, bold: true, font: T.font, color: T.headingColor },
-          paragraph: { spacing: { before: 0, after: 160 }, outlineLevel: 0 } },
+          paragraph: { spacing: { before: 0, after: 100 }, outlineLevel: 0 } },
         { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
           run: { size: T.h2, bold: true, font: T.font, color: T.headingColor },
-          paragraph: { spacing: { before: 220, after: 140 }, outlineLevel: 1 } },
+          paragraph: { spacing: { before: 240, after: 140 }, outlineLevel: 1 } },
         { id: "Heading3", name: "Heading 3", basedOn: "Normal", next: "Normal", quickFormat: true,
           run: { size: T.h3, bold: true, font: T.font, color: T.headingColor },
-          paragraph: { spacing: { before: 180, after: 120 }, outlineLevel: 2 } },
+          paragraph: { spacing: { before: 200, after: 120 }, outlineLevel: 2 } },
       ],
     },
     numbering: { config: [{ reference: "bullets",
