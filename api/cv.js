@@ -41,13 +41,15 @@ module.exports = async (req, res) => {
       const buffer = await generateDocx(await r.text());
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}.docx"`);
+      res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=86400");
       return res.send(buffer);
     }
 
     const buffer = await generatePdf(url);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}.pdf"`);
-return res.send(Buffer.from(buffer));
+    res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=86400");
+    return res.send(Buffer.from(buffer));
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: e.message });
