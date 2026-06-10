@@ -53,8 +53,8 @@ module.exports = async (req, res) => {
 };
 
 async function generatePdf(url) {
-  const chromium = require("@sparticuz/chromium");
-  const puppeteer = require("puppeteer-core");
+const chromium = (await import("@sparticuz/chromium")).default;
+const puppeteer = (await import("puppeteer-core")).default ?? (await import("puppeteer-core"));
 
   const browser = await puppeteer.launch({
     args: chromium.args,
