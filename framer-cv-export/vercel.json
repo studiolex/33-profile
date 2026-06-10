@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/cv.js": {
+      "memory": 1536,
+      "maxDuration": 30
+    }
+  }
+}
