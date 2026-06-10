@@ -105,8 +105,21 @@ async function generatePdf(url) {
     await page.waitForNetworkIdle({ idleTime: 500, timeout: 4000 }).catch(() => {});
     // korte adempauze zodat fonts en afbeeldingen gepaint zijn
     await new Promise((r) => setTimeout(r, 400));
-    await page.addStyleTag({ content: PRINT_CSS });
+await page.addStyleTag({ content: PRINT_CSS });
     await page.emulateMediaType("print");
+
+    // Secties die op één A4 passen in hun geheel heel houden;
+    // te grote secties blijven gewoon (netjes, tussen CaseItems) breken.
+    await page.evaluate(() => {
+      const MAX = 1600; // ≈ bruikbare paginahoogte in layout-pixels bij scale 0.65
+      document.querySelectorAll('[data-framer-name="ExpertiseItem"]').forEach((el) => {
+        if (el.offsetHeight < MAX) {
+          el.style.breakInside = "avoid";
+          el.style.pageBreakInside = "avoid";
+        }
+      });
+    });
+
     return await page.pdf(PDF_OPTIONS);
   } finally {
     await browser.close();
