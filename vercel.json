@@ -1,16 +1,5 @@
 {
   "functions": {
-    "api/cv.js": {
-      "maxDuration": 30
-    },
-    "api/warm.js": {
-      "maxDuration": 300
-    }
-  },
-  "crons": [
-    {
-      "path": "/api/warm",
-      "schedule": "0 5 * * *"
-    }
-  ]
+    "api/cv.js": { "memory": 1769, "maxDuration": 60 }
+  }
 }
