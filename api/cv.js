@@ -8,7 +8,7 @@ const SLUG_RE = /^[\p{L}\p{N}()'-]{1,80}$/u;
 const PDF_OPTIONS = {
   format: "A4",
   printBackground: true,
-  scale: 0.65,
+  scale: 0.75,
   margin: { top: "12mm", bottom: "12mm", left: "0mm", right: "0mm" },
 };
 
