@@ -9,7 +9,7 @@ const PDF_OPTIONS = {
   format: "A4",
   printBackground: true,
   scale: 0.65,
-  margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" },
+  margin: { top: "12mm", bottom: "12mm", left: "0mm", right: "0mm" },
 };
 
 module.exports = async (req, res) => {
@@ -24,7 +24,6 @@ module.exports = async (req, res) => {
     const safeName = slug.normalize("NFD").replace(/[^\w-]/g, "");
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${safeName}-33-chambers.pdf"`);
-    // 1 dag cache; daarna mag oude versie geserveerd worden terwijl een nieuwe wordt gemaakt
     res.setHeader("Cache-Control", "public, s-maxage=86400, stale-while-revalidate=604800");
     return res.send(Buffer.from(pdf));
   } catch (e) {
@@ -48,7 +47,7 @@ async function generatePdf(url) {
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
 
-    // wacht écht op fonts en afbeeldingen (geen gok van 400ms meer)
+    // wacht op fonts en afbeeldingen
     await page.evaluate(() => document.fonts.ready);
     await page.evaluate(() =>
       Promise.all(
@@ -57,6 +56,15 @@ async function generatePdf(url) {
           .map((img) => new Promise((r) => { img.onload = img.onerror = r; }))
       )
     );
+
+    // verberg secties zonder cases (bv. lege "Criminal Fraud")
+    await page.evaluate(() => {
+      document
+        .querySelectorAll('[data-framer-name="ExpertiseItem"], [data-framer-name="PracticeSection"]')
+        .forEach((section) => {
+          if (!section.querySelector('[data-framer-name="CaseItem"]')) section.remove();
+        });
+    });
 
     await page.emulateMediaType("print");
     return await page.pdf(PDF_OPTIONS);
