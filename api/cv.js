@@ -8,8 +8,8 @@ const SLUG_RE = /^[\p{L}\p{N}()'-]{1,80}$/u;
 const PDF_OPTIONS = {
   format: "A4",
   printBackground: true,
-scale: 0.65,  scale: 0.65,  margin: { top: "16mm", bottom: "16mm", left: "0mm", right: "0mm" },
-,
+  scale: 0.65,
+  margin: { top: "16mm", bottom: "16mm", left: "0mm", right: "0mm" },
 };
 
 module.exports = async (req, res) => {
