@@ -57,6 +57,19 @@ async function generatePdf(url) {
       )
     );
 
+    // hou elke sectiekop (grijze balk) in zijn geheel op één pagina,
+    // ongeacht hoe de layer in Framer heet
+    await page.evaluate(() => {
+      document.querySelectorAll("h1, h2, h3, h4, h5").forEach((h) => {
+        const bar = h.parentElement;
+        if (bar) {
+          bar.style.breakInside = "avoid";
+          bar.style.pageBreakInside = "avoid";
+        }
+        h.style.breakAfter = "avoid";
+      });
+    });
+
     // verberg secties zonder cases (bv. lege "Criminal Fraud")
     await page.evaluate(() => {
       document
