@@ -59,19 +59,44 @@ async function generatePdf(url) {
       )
     );
 
-    // 1) Sectiekoppen: nooit doormidden breken én nooit los van hun inhoud.
-    //    Alleen toepassen op compacte kop-balken; grote containers overslaan.
+    // 1) Lijm elke titelbalk fysiek vast aan de eerstvolgende sectie:
+    //    samen in één wrapper, zodat ze nooit gescheiden kunnen worden.
     await page.evaluate(() => {
+      const isSection = (el) =>
+        el &&
+        el.matches &&
+        el.matches('[data-framer-name="ExpertiseItem"], [data-framer-name="PracticeSection"]');
+
       document.querySelectorAll("h1, h2, h3, h4, h5").forEach((h) => {
         h.style.breakInside = "avoid";
-        h.style.breakAfter = "avoid";
-        const bar = h.parentElement;
-        // parent alleen beschermen als het echt een balk is (max ~200px hoog)
-        if (bar && bar.offsetHeight > 0 && bar.offsetHeight < 200) {
+
+        // vind de balk: het compacte element rond de kop
+        let bar = h.parentElement;
+        if (!bar || bar.offsetHeight <= 0 || bar.offsetHeight >= 200) return;
+
+        // vind wat er direct op de balk volgt
+        const next = bar.nextElementSibling;
+
+        if (next && isSection(next)) {
+          // wikkel balk + sectie samen in een wrapper
+          const wrap = document.createElement("div");
+          bar.parentElement.insertBefore(wrap, bar);
+          wrap.appendChild(bar);
+          wrap.appendChild(next);
+
+          // past het duo op één pagina? → als geheel bij elkaar houden.
+          // Zo niet: laat het duo breken, maar bescherm de balk zelf.
+          const MAX = 1600;
+          if (wrap.offsetHeight < MAX) {
+            wrap.style.breakInside = "avoid";
+            wrap.style.pageBreakInside = "avoid";
+          }
           bar.style.breakInside = "avoid";
           bar.style.pageBreakInside = "avoid";
-          bar.style.breakAfter = "avoid";
-          bar.style.pageBreakAfter = "avoid";
+        } else {
+          // geen sectie direct erna (bv. de grote naamsbanner) → alleen de balk beschermen
+          bar.style.breakInside = "avoid";
+          bar.style.pageBreakInside = "avoid";
         }
       });
     });
