@@ -9,7 +9,7 @@ const PDF_OPTIONS = {
   format: "A4",
   printBackground: true,
   scale: 0.65,
-  margin: { top: "8mm", bottom: "8mm", left: "0mm", right: "0mm" },
+  margin: { top: "0mm", bottom: "0mm", left: "0mm", right: "0mm" },
 };
 
 module.exports = async (req, res) => {
