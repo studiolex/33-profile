@@ -1,6 +1,6 @@
 // Nachtelijke cache-warmer: genereert alle CV's alvast (3 tegelijk).
 module.exports = async (req, res) => {
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (req.headers.authorization !== `Bearer ${process.env.WARM_SECRET}`) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   try {
