@@ -59,11 +59,15 @@ async function generatePdf(url) {
       )
     );
 
-    // 1) Sectiekoppen: nooit doormidden breken én nooit los van hun inhoud
+    // 1) Sectiekoppen: nooit doormidden breken én nooit los van hun inhoud.
+    //    Alleen toepassen op compacte kop-balken; grote containers overslaan.
     await page.evaluate(() => {
       document.querySelectorAll("h1, h2, h3, h4, h5").forEach((h) => {
+        h.style.breakInside = "avoid";
+        h.style.breakAfter = "avoid";
         const bar = h.parentElement;
-        if (bar) {
+        // parent alleen beschermen als het echt een balk is (max ~200px hoog)
+        if (bar && bar.offsetHeight > 0 && bar.offsetHeight < 200) {
           bar.style.breakInside = "avoid";
           bar.style.pageBreakInside = "avoid";
           bar.style.breakAfter = "avoid";
