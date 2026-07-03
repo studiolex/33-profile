@@ -13,6 +13,9 @@ const PDF_OPTIONS = {
 };
 
 module.exports = async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET");
+  
   try {
     const slug = decodeURIComponent(req.query.slug || "");
     if (!SLUG_RE.test(slug)) {
