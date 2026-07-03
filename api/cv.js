@@ -80,7 +80,7 @@ async function generatePdf(url) {
 
     // 2) De gouden naamsbanner: alleen naar een nieuwe pagina als er op de
     //    huidige pagina geen ruimte meer is voor de banner + een stuk content.
-    //    Gededupliceerd: de breuk wordt op precies één element gezet.
+    //    Gededupliceerd via een Set: de breuk komt op precies één element.
     await page.evaluate(() => {
       const PAGE = 1540;   // ≈ bruikbare paginahoogte in layout-px bij scale 0.65
       const NEEDED = 350;  // banner moet met minstens ~350px content mee kunnen
@@ -99,7 +99,7 @@ async function generatePdf(url) {
           ) {
             bar = bar.parentElement;
           }
-          bars.add(bar); // Set voorkomt dubbele breuken (= lege pagina's)
+          bars.add(bar);
         }
       });
 
@@ -115,7 +115,8 @@ async function generatePdf(url) {
     });
 
     // 3) Grijze sectiekoppen: vastlijmen aan hun eigen sectie via een wrapper,
-    //    zodat kop en content nooit gescheiden raken.
+    //    zodat kop en content nooit gescheiden raken. Stapt over dunne
+    //    tussenelementen (lijnen/spacers) heen.
     await page.evaluate(() => {
       const isSection = (el) =>
         el &&
@@ -131,12 +132,27 @@ async function generatePdf(url) {
         let bar = h.parentElement;
         if (!bar || bar.offsetHeight <= 0 || bar.offsetHeight >= 200) return;
 
-        const next = bar.nextElementSibling;
+        // zoek de eerstvolgende sectie, eventueel over 1-2 dunne tussenelementen heen
+        let next = bar.nextElementSibling;
+        let hops = 0;
+        while (next && !isSection(next) && hops < 2 && next.offsetHeight < 100) {
+          next = next.nextElementSibling;
+          hops++;
+        }
 
         if (next && isSection(next)) {
+          // neem eventuele tussenelementen mee in de wrapper
+          const between = [];
+          let cursor = bar.nextElementSibling;
+          while (cursor && cursor !== next) {
+            between.push(cursor);
+            cursor = cursor.nextElementSibling;
+          }
+
           const wrap = document.createElement("div");
           bar.parentElement.insertBefore(wrap, bar);
           wrap.appendChild(bar);
+          between.forEach((el) => wrap.appendChild(el));
           wrap.appendChild(next);
 
           const MAX = 1600;
