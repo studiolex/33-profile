@@ -59,85 +59,16 @@ async function generatePdf(url) {
       )
     );
 
-    // 1) Lijm elke titelbalk fysiek vast aan de eerstvolgende sectie:
-    //    samen in één wrapper, zodat ze nooit gescheiden kunnen worden.
-    await page.evaluate(() => {
-      const isSection = (el) =>
-        el &&
-        el.matches &&
-        el.matches('[data-framer-name="ExpertiseItem"], [data-framer-name="PracticeSection"]');
-
-      document.querySelectorAll("h1, h2, h3, h4, h5").forEach((h) => {
-        h.style.breakInside = "avoid";
-
-        // vind de balk: het compacte element rond de kop
-        let bar = h.parentElement;
-        if (!bar || bar.offsetHeight <= 0 || bar.offsetHeight >= 200) return;
-
-        // vind wat er direct op de balk volgt
-        const next = bar.nextElementSibling;
-
-        if (next && isSection(next)) {
-          // wikkel balk + sectie samen in een wrapper
-          const wrap = document.createElement("div");
-          bar.parentElement.insertBefore(wrap, bar);
-          wrap.appendChild(bar);
-          wrap.appendChild(next);
-
-          // past het duo op één pagina? → als geheel bij elkaar houden.
-          // Zo niet: laat het duo breken, maar bescherm de balk zelf.
-          const MAX = 1600;
-          if (wrap.offsetHeight < MAX) {
-            wrap.style.breakInside = "avoid";
-            wrap.style.pageBreakInside = "avoid";
-          }
-          bar.style.breakInside = "avoid";
-          bar.style.pageBreakInside = "avoid";
-        } else {
-          // geen sectie direct erna (bv. de grote naamsbanner) → alleen de balk beschermen
-          bar.style.breakInside = "avoid";
-          bar.style.pageBreakInside = "avoid";
-        }
-      });
-    });
-
-    // 2) Secties die op één pagina passen: in hun geheel bij elkaar houden.
-    //    Grotere secties breken gewoon netjes tussen de cases.
-    await page.evaluate(() => {
-      const MAX = 1600; // ≈ bruikbare paginahoogte in layout-pixels bij scale 0.65
-      document
-        .querySelectorAll('[data-framer-name="ExpertiseItem"], [data-framer-name="PracticeSection"]')
-        .forEach((el) => {
-          if (el.offsetHeight < MAX) {
-            el.style.breakInside = "avoid";
-            el.style.pageBreakInside = "avoid";
-          }
-        });
-    });
-
-    // 3) Verberg alleen écht lege secties: geen cases ÉN geen beschrijvende tekst
+    // 1) Verberg alleen écht lege secties: geen cases ÉN geen beschrijvende tekst
     await page.evaluate(() => {
       document
         .querySelectorAll('[data-framer-name="ExpertiseItem"], [data-framer-name="PracticeSection"]')
         .forEach((section) => {
           const hasCases = section.querySelector('[data-framer-name="CaseItem"]');
-          if (hasCases) return; // cases aanwezig → altijd tonen
+          if (hasCases) return;
 
           const heading = section.querySelector("h1, h2, h3, h4, h5");
           const headingText = heading ? heading.textContent : "";
           const bodyText = (section.textContent || "")
             .replace(headingText, "")
             .replace(/\s+/g, " ")
-            .trim();
-
-          // minder dan 40 tekens échte inhoud → beschouwen als leeg
-          if (bodyText.length < 40) section.remove();
-        });
-    });
-
-    await page.emulateMediaType("print");
-    return await page.pdf(PDF_OPTIONS);
-  } finally {
-    await browser.close();
-  }
-}
