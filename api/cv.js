@@ -15,7 +15,6 @@ const PDF_OPTIONS = {
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET");
-  
   try {
     const slug = decodeURIComponent(req.query.slug || "");
     if (!SLUG_RE.test(slug)) {
@@ -60,25 +59,50 @@ async function generatePdf(url) {
       )
     );
 
-    // hou elke sectiekop (grijze balk) in zijn geheel op één pagina,
-    // ongeacht hoe de layer in Framer heet
+    // 1) Sectiekoppen: nooit doormidden breken én nooit los van hun inhoud
     await page.evaluate(() => {
       document.querySelectorAll("h1, h2, h3, h4, h5").forEach((h) => {
         const bar = h.parentElement;
         if (bar) {
           bar.style.breakInside = "avoid";
           bar.style.pageBreakInside = "avoid";
+          bar.style.breakAfter = "avoid";
+          bar.style.pageBreakAfter = "avoid";
         }
-        h.style.breakAfter = "avoid";
       });
     });
 
-    // verberg secties zonder cases (bv. lege "Criminal Fraud")
+    // 2) Secties die op één pagina passen: in hun geheel bij elkaar houden.
+    //    Grotere secties breken gewoon netjes tussen de cases.
+    await page.evaluate(() => {
+      const MAX = 1600; // ≈ bruikbare paginahoogte in layout-pixels bij scale 0.65
+      document
+        .querySelectorAll('[data-framer-name="ExpertiseItem"], [data-framer-name="PracticeSection"]')
+        .forEach((el) => {
+          if (el.offsetHeight < MAX) {
+            el.style.breakInside = "avoid";
+            el.style.pageBreakInside = "avoid";
+          }
+        });
+    });
+
+    // 3) Verberg alleen écht lege secties: geen cases ÉN geen beschrijvende tekst
     await page.evaluate(() => {
       document
         .querySelectorAll('[data-framer-name="ExpertiseItem"], [data-framer-name="PracticeSection"]')
         .forEach((section) => {
-          if (!section.querySelector('[data-framer-name="CaseItem"]')) section.remove();
+          const hasCases = section.querySelector('[data-framer-name="CaseItem"]');
+          if (hasCases) return; // cases aanwezig → altijd tonen
+
+          const heading = section.querySelector("h1, h2, h3, h4, h5");
+          const headingText = heading ? heading.textContent : "";
+          const bodyText = (section.textContent || "")
+            .replace(headingText, "")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          // minder dan 40 tekens échte inhoud → beschouwen als leeg
+          if (bodyText.length < 40) section.remove();
         });
     });
 
