@@ -6,9 +6,9 @@ module.exports = async (req, res) => {
   try {
     const sm = await fetch("https://www.33chambers.co.uk/sitemap.xml").then((r) => r.text());
     const slugs = [...new Set(
-      [...sm.matchAll(/\/people\/([^/<"]+?)\//g)]
+      [...sm.matchAll(/\/people\/([^/<"?\s]+)/g)]
         .map((m) => decodeURIComponent(m[1]))
-        .filter((s) => !s.includes("pdf"))
+        .filter((s) => s && s.toLowerCase() !== "pdf")
     )];
     const base = `https://${req.headers.host}/api/cv`;
     const results = [];
