@@ -72,3 +72,78 @@ async function generatePdf(url) {
           const bodyText = (section.textContent || "")
             .replace(headingText, "")
             .replace(/\s+/g, " ")
+            .trim();
+
+          if (bodyText.length < 40) section.remove();
+        });
+    });
+
+    // 2) De grote gouden naamsbanner ("Naam : Experience & Expertise"):
+    //    ALTIJD op een nieuwe pagina beginnen. Expliciete break, geen avoid-regels —
+    //    die veroorzaken in Chromium uitgesmeerde achtergrondblokken.
+    await page.evaluate(() => {
+      document.querySelectorAll("h1, h2, h3, h4, h5, div, p, span").forEach((el) => {
+        if (
+          el.children.length === 0 &&
+          /experience\s*&\s*expertise/i.test(el.textContent || "")
+        ) {
+          // vind de banner: het compacte gekleurde blok rond deze tekst
+          let bar = el;
+          while (
+            bar.parentElement &&
+            bar.parentElement.offsetHeight < 250 &&
+            bar.parentElement !== document.body
+          ) {
+            bar = bar.parentElement;
+          }
+          bar.style.breakBefore = "page";
+          bar.style.pageBreakBefore = "always";
+        }
+      });
+    });
+
+    // 3) Grijze sectiekoppen: vastlijmen aan hun eigen sectie via een wrapper,
+    //    zodat kop en content nooit gescheiden raken.
+    await page.evaluate(() => {
+      const isSection = (el) =>
+        el &&
+        el.matches &&
+        el.matches('[data-framer-name="ExpertiseItem"], [data-framer-name="PracticeSection"]');
+
+      document.querySelectorAll("h1, h2, h3, h4, h5").forEach((h) => {
+        // sla de grote naamsbanner over (die is al afgehandeld in stap 2)
+        if (/experience\s*&\s*expertise/i.test(h.textContent || "")) return;
+
+        h.style.breakInside = "avoid";
+
+        let bar = h.parentElement;
+        if (!bar || bar.offsetHeight <= 0 || bar.offsetHeight >= 200) return;
+
+        const next = bar.nextElementSibling;
+
+        if (next && isSection(next)) {
+          const wrap = document.createElement("div");
+          bar.parentElement.insertBefore(wrap, bar);
+          wrap.appendChild(bar);
+          wrap.appendChild(next);
+
+          const MAX = 1600;
+          if (wrap.offsetHeight < MAX) {
+            wrap.style.breakInside = "avoid";
+            wrap.style.pageBreakInside = "avoid";
+          }
+          bar.style.breakInside = "avoid";
+          bar.style.pageBreakInside = "avoid";
+        } else {
+          bar.style.breakInside = "avoid";
+          bar.style.pageBreakInside = "avoid";
+        }
+      });
+    });
+
+    await page.emulateMediaType("print");
+    return await page.pdf(PDF_OPTIONS);
+  } finally {
+    await browser.close();
+  }
+}
