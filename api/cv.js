@@ -78,16 +78,19 @@ async function generatePdf(url) {
         });
     });
 
-    // 2) De grote gouden naamsbanner ("Naam : Experience & Expertise"):
-    //    ALTIJD op een nieuwe pagina beginnen. Expliciete break, geen avoid-regels —
-    //    die veroorzaken in Chromium uitgesmeerde achtergrondblokken.
+    // 2) De gouden naamsbanner: alleen naar een nieuwe pagina als er op de
+    //    huidige pagina geen ruimte meer is voor de banner + een stuk content.
+    //    Gededupliceerd: de breuk wordt op precies één element gezet.
     await page.evaluate(() => {
+      const PAGE = 1540;   // ≈ bruikbare paginahoogte in layout-px bij scale 0.65
+      const NEEDED = 350;  // banner moet met minstens ~350px content mee kunnen
+
+      const bars = new Set();
       document.querySelectorAll("h1, h2, h3, h4, h5, div, p, span").forEach((el) => {
         if (
           el.children.length === 0 &&
           /experience\s*&\s*expertise/i.test(el.textContent || "")
         ) {
-          // vind de banner: het compacte gekleurde blok rond deze tekst
           let bar = el;
           while (
             bar.parentElement &&
@@ -96,6 +99,15 @@ async function generatePdf(url) {
           ) {
             bar = bar.parentElement;
           }
+          bars.add(bar); // Set voorkomt dubbele breuken (= lege pagina's)
+        }
+      });
+
+      bars.forEach((bar) => {
+        const top = bar.getBoundingClientRect().top + window.scrollY;
+        const posOnPage = top % PAGE;
+        const remaining = PAGE - posOnPage;
+        if (remaining < bar.offsetHeight + NEEDED) {
           bar.style.breakBefore = "page";
           bar.style.pageBreakBefore = "always";
         }
