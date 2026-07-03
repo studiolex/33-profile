@@ -24,7 +24,7 @@ module.exports = async (req, res) => {
     const safeName = slug.normalize("NFD").replace(/[^\w-]/g, "");
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${safeName}-33-chambers.pdf"`);
-    res.setHeader("Cache-Control", "public, s-maxage=86400, stale-while-revalidate=604800");
+    res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=604800");
     return res.send(Buffer.from(pdf));
   } catch (e) {
     console.error(e);
