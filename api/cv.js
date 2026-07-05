@@ -9,7 +9,7 @@ const PDF_OPTIONS = {
   format: "A4",
   printBackground: true,
   scale: 0.65,
-  margin: { top: "0mm", bottom: "0mm", left: "0mm", right: "0mm" },
+  margin: { top: "12mm", bottom: "12mm", left: "0mm", right: "0mm" },
 };
 
 module.exports = async (req, res) => {
@@ -78,14 +78,14 @@ async function generatePdf(url) {
         });
     });
 
-    // 2) De gouden naamsbanner: alleen naar een nieuwe pagina als er op de
-    //    huidige pagina geen ruimte meer is voor de banner + een stuk content.
-    //    Gededupliceerd via een Set: de breuk komt op precies één element.
+    // 2) De gouden naamsbanner: alleen naar een nieuwe pagina als er geen
+    //    ruimte meer is voor de banner + een stuk content. Geneste duplicaten
+    //    worden gefilterd zodat er nooit een dubbele breuk (= lege pagina) ontstaat.
     await page.evaluate(() => {
-      const PAGE = 1540;   // ≈ bruikbare paginahoogte in layout-px bij scale 0.65
+      const PAGE = 1585;   // ≈ bruikbare paginahoogte in layout-px bij 12mm marge
       const NEEDED = 350;  // banner moet met minstens ~350px content mee kunnen
 
-      const bars = new Set();
+      const candidates = new Set();
       document.querySelectorAll("h1, h2, h3, h4, h5, div, p, span").forEach((el) => {
         if (
           el.children.length === 0 &&
@@ -99,9 +99,16 @@ async function generatePdf(url) {
           ) {
             bar = bar.parentElement;
           }
-          bars.add(bar);
+          candidates.add(bar);
         }
       });
+
+      // houd per banner alleen het buitenste element over:
+      // een element vervalt als een ander kandidaat-element het omvat
+      const all = [...candidates];
+      const bars = all.filter(
+        (b) => !all.some((o) => o !== b && o.contains(b))
+      );
 
       bars.forEach((bar) => {
         const top = bar.getBoundingClientRect().top + window.scrollY;
@@ -124,7 +131,6 @@ async function generatePdf(url) {
         el.matches('[data-framer-name="ExpertiseItem"], [data-framer-name="PracticeSection"]');
 
       document.querySelectorAll("h1, h2, h3, h4, h5").forEach((h) => {
-        // sla de grote naamsbanner over (die is al afgehandeld in stap 2)
         if (/experience\s*&\s*expertise/i.test(h.textContent || "")) return;
 
         h.style.breakInside = "avoid";
@@ -132,7 +138,6 @@ async function generatePdf(url) {
         let bar = h.parentElement;
         if (!bar || bar.offsetHeight <= 0 || bar.offsetHeight >= 200) return;
 
-        // zoek de eerstvolgende sectie, eventueel over 1-2 dunne tussenelementen heen
         let next = bar.nextElementSibling;
         let hops = 0;
         while (next && !isSection(next) && hops < 2 && next.offsetHeight < 100) {
@@ -141,7 +146,6 @@ async function generatePdf(url) {
         }
 
         if (next && isSection(next)) {
-          // neem eventuele tussenelementen mee in de wrapper
           const between = [];
           let cursor = bar.nextElementSibling;
           while (cursor && cursor !== next) {
