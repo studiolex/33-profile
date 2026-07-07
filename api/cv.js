@@ -81,12 +81,14 @@ async function generatePdf(url) {
         });
     });
 
-    // 2) De gouden naamsbanner ("Naam : Experience & Expertise") begint ALTIJD
-    //    op een nieuwe pagina — consistente hoofdstuk-opmaak. Geneste duplicaten
-    //    worden gefilterd zodat er nooit een dubbele breuk (= lege pagina) ontstaat.
+    // 2) De gouden naamsbanner begint ALTIJD op een nieuwe pagina.
+    //    Belangrijk: alleen de ZICHTBARE banner — Framer rendert verborgen
+    //    breakpoint-duplicaten, en een breuk op een verborgen duplicaat
+    //    veroorzaakt een lege pagina.
     await page.evaluate(() => {
       const candidates = new Set();
       document.querySelectorAll("h1, h2, h3, h4, h5, div, p, span").forEach((el) => {
+        if (el.offsetParent === null) return; // verborgen (breakpoint-duplicaat) → overslaan
         if (
           el.children.length === 0 &&
           /experience\s*&\s*expertise/i.test(el.textContent || "")
@@ -99,10 +101,11 @@ async function generatePdf(url) {
           ) {
             bar = bar.parentElement;
           }
-          candidates.add(bar);
+          if (bar.offsetHeight > 0) candidates.add(bar); // alleen zichtbare balken
         }
       });
 
+      // houd per banner alleen het buitenste element over
       const all = [...candidates];
       const bars = all.filter(
         (b) => !all.some((o) => o !== b && o.contains(b))
