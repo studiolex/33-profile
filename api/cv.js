@@ -81,45 +81,11 @@ async function generatePdf(url) {
         });
     });
 
-    // 2) De gouden naamsbanner begint ALTIJD op een nieuwe pagina.
-    //    Belangrijk: alleen de ZICHTBARE banner — Framer rendert verborgen
-    //    breakpoint-duplicaten, en een breuk op een verborgen duplicaat
-    //    veroorzaakt een lege pagina.
-    await page.evaluate(() => {
-      const candidates = new Set();
-      document.querySelectorAll("h1, h2, h3, h4, h5, div, p, span").forEach((el) => {
-        if (el.offsetParent === null) return; // verborgen (breakpoint-duplicaat) → overslaan
-        if (
-          el.children.length === 0 &&
-          /experience\s*&\s*expertise/i.test(el.textContent || "")
-        ) {
-          let bar = el;
-          while (
-            bar.parentElement &&
-            bar.parentElement.offsetHeight < 250 &&
-            bar.parentElement !== document.body
-          ) {
-            bar = bar.parentElement;
-          }
-          if (bar.offsetHeight > 0) candidates.add(bar); // alleen zichtbare balken
-        }
-      });
-
-      // houd per banner alleen het buitenste element over
-      const all = [...candidates];
-      const bars = all.filter(
-        (b) => !all.some((o) => o !== b && o.contains(b))
-      );
-
-      bars.forEach((bar) => {
-        bar.style.breakBefore = "page";
-        bar.style.pageBreakBefore = "always";
-      });
-    });
-
-    // 3) Grijze sectiekoppen: vastlijmen aan hun eigen sectie via een wrapper,
+    // 2) Grijze sectiekoppen: vastlijmen aan hun eigen sectie via een wrapper,
     //    zodat kop en content nooit gescheiden raken. Stapt over dunne
     //    tussenelementen (lijnen/spacers) heen.
+    //    De grote gouden naamsbanner wordt bewust volledig met rust gelaten:
+    //    elke breekregel daarop veroorzaakt render-artefacten in Chromium.
     await page.evaluate(() => {
       const isSection = (el) =>
         el &&
