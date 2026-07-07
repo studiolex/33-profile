@@ -21,8 +21,10 @@ const PDF_OPTIONS = {
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET");
+
   try {
     const slug = decodeURIComponent(req.query.slug || "");
+
     if (!SLUG_RE.test(slug)) {
       return res.status(400).json({ error: "Ongeldige of ontbrekende ?slug=" });
     }
@@ -30,6 +32,22 @@ module.exports = async (req, res) => {
     const pdf = await generatePdf(`${SITE}/people/${encodeURIComponent(slug)}/pdf`);
 
     const safeName = slug.normalize("NFD").replace(/[^\w-]/g, "");
+
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${safeName}-33-chambers.pdf"`);
-    res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=604800");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${safeName}-33-chambers.pdf"`
+    );
+    res.setHeader(
+      "Cache-Control",
+      "public, s-maxage=600, stale-while-revalidate=604800"
+    );
+
+    return res.status(200).send(pdf);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      error: "PDF kon niet worden gegenereerd",
+    });
+  }
+};
